@@ -9,6 +9,7 @@
 # Contributor: Ray Rashif <schiv@archlinux.org>
 # Contributor: Tobias Powalowski <tpowa@archlinux.org>
 
+_proj="opencv"
 _pkg="${_proj}"
 pkgname="${_pkg}2"
 pkgver=2.4.13.7
