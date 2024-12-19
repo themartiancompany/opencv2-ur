@@ -9,6 +9,11 @@
 # Contributor: Ray Rashif <schiv@archlinux.org>
 # Contributor: Tobias Powalowski <tpowa@archlinux.org>
 
+_python="false"
+_pymajver="2"
+_pyminver="7"
+_pyver="${_pymajver}.${_pyminver}"
+_py="python${_pymajver}"
 _proj="opencv"
 _pkg="${_proj}"
 pkgname="${_pkg}2"
@@ -51,6 +56,15 @@ makedepends=(
 optdepends=(
   'opencl-icd-loader: for coding with OpenCL'
 )
+if [[ "${_python}" == "true" ]]; then
+  makedepends+=(
+    "${_py}-numpy"
+  )
+elif [[ "${_python}" == "false" ]]; then
+  optdepends+=(
+    "${_py}-numpy: Python 2.x bindings"
+  )
+fi
 _http="https://github.com"
 _ns="${_pkg}"
 _url="${_http}/${_ns}/${_pkg}"
@@ -65,24 +79,92 @@ sha256sums=(
 
 prepare() {
   patch \
-    -d "${_pkg}-${pkgver}" \
+    -d \
+      "${_pkg}-${pkgver}" \
     -Np1 \
     -i \
     "${srcdir}/010-${pkgname}-remove-prototypes-warnings.patch"
 }
 
+_bin_get() {
+  local \
+    _bin \
+    _cmake
+  _cmake="$( \
+    command \
+      -v \
+      "cmake")"
+  _bin="$( \
+    dirname \
+      "${_cmake}")"
+  echo \
+    "${_bin}"
+}
+
+_usr_get() {
+  local \
+    _bin
+  _bin="$( \
+    _bin_get)"
+  echo \
+    "$(dirname \
+      "${_bin}")"
+}
+
+_lib_get() {
+  local \
+    _usr
+  _usr="$( \
+    _usr_get)"  
+  echo \
+    "${_usr}/lib"
+}
+
+_include_get() {
+  local \
+    _usr
+  _usr="$( \
+    _usr_get)"  
+  echo \
+    "${_usr}/include"
+}
+
 build() {
   local \
-    _cmake_opts=()
+    _cmake_opts=() \
+    _opencv_python \
+    _bin \
+    _include \
+    _lib \
+    _python_include \
+    _numpy_include \
+    _cxxflags=()
+  _cxxflags=(
+    "${CXXFLAGS}"
+    -std=c++14
+    -ffat-lto-objects
+  )
   export \
-    CXXFLAGS+=' -std=c++14 -ffat-lto-objects'
-  _cmake_opts=(
+    CXXFLAGS="${_cxxflags[*]}"
+  _opencv_python="OFF"
+  if [[ "${_python}" == "true" ]]; then
+    _bin="$( \
+      _bin_get)"
+    _lib="$( \
+      _lib_get)"
+    _include="$( \
+      _include_get)"
+    _numpy_include="${_lib}/python${_pyver}/site-packages/numpy/core/include"
+    _python_include="${_include}/python${_pyver}"
+    _opencv_python="ON"
+  fi
+  _cmake_opts+=(
     -DCMAKE_BUILD_TYPE:STRING='None'
     -DCMAKE_INSTALL_PREFIX:PATH="/opt/${pkgname}"
     -DCMAKE_SKIP_INSTALL_RPATH:BOOL='YES'
     -DBUILD_JASPER:BOOL='ON'
     -DBUILD_opencv_java:BOOL='OFF'
-    -DBUILD_opencv_python:BOOL='OFF'
+    -DBUILD_opencv_python:BOOL="${_opencv_python}"
     -DBUILD_EXAMPLES:BOOL='OFF'
     -DBUILD_PERF_TESTS:BOOL='OFF'
     -DBUILD_TESTS:BOOL='OFF'
@@ -106,6 +188,22 @@ build() {
     -DENABLE_AVX2:BOOL='OFF'
     -Wno-dev
   )
+  if [[ "${_python}" == "true" ]]; then
+    _cmake_opts=(
+      -DPYTHON_DEFAULT_EXECUTABLE:STRING="${_bin}/${_py}"
+      -DPYTHON_EXECUTABLE:STRING="${_bin}/${_py}"
+      -DPYTHON_INCLUDE_PATH:STRING="${_python_include}"
+      -DPYTHON_LIBRARIES:STRING="${_lib}/python${_pyver}.so"
+      -DPYTHON_LIBRARY:STRING="${_lib}/python${pyver}.so" \
+      -DPYTHON_NUMPY_INCLUDE_DIR:STRING="${_numpy_include}"
+    )
+    export \
+      PYTHON_INCLUDE_PATH="${_include}/python${_pyver}" \
+      PYTHON_LIBRARIES="${_lib}" \
+      PYTHON_LIBRARY="${_lib}/python${_pyver}.so" \
+      PYTHON_NUMPY_INCLUDE_DIR="${_numpy_include}" \
+      PYTHON_EXECUTABLE="${_bin}/${_py}"
+  fi
   cmake \
     -S \
       "${_pkg}-${pkgver}" \
